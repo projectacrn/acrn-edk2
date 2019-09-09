@@ -229,6 +229,7 @@ INF  OvmfPkg/AcrnRealTimeClockRuntimeDxe/AcrnRealTimeClockRuntimeDxe.inf
 INF  OvmfPkg/VirtioPciDeviceDxe/VirtioPciDeviceDxe.inf
 #INF  OvmfPkg/Virtio10Dxe/Virtio10.inf
 INF  OvmfPkg/VirtioBlkDxe/VirtioBlk.inf
+INF  OvmfPkg/GvtGopDxe/GvtGopDxe.inf
 #INF  OvmfPkg/VirtioScsiDxe/VirtioScsi.inf
 #INF  OvmfPkg/VirtioRngDxe/VirtioRng.inf
 #INF  OvmfPkg/XenIoPciDxe/XenIoPciDxe.inf
@@ -244,7 +245,7 @@ INF  MdeModulePkg/Universal/MonotonicCounterRuntimeDxe/MonotonicCounterRuntimeDx
 INF  MdeModulePkg/Universal/CapsuleRuntimeDxe/CapsuleRuntimeDxe.inf
 INF  MdeModulePkg/Universal/Console/ConPlatformDxe/ConPlatformDxe.inf
 INF  MdeModulePkg/Universal/Console/ConSplitterDxe/ConSplitterDxe.inf
-#INF  MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf
+INF  MdeModulePkg/Universal/Console/GraphicsConsoleDxe/GraphicsConsoleDxe.inf
 INF  MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf
 #INF  MdeModulePkg/Universal/DriverHealthManagerDxe/DriverHealthManagerDxe.inf
 INF  MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
