@@ -16,8 +16,105 @@ DetectGvtDevice (
   IN EFI_PCI_IO_PROTOCOL *PciIo
   )
 {
-  EFI_STATUS                    Status = EFI_SUCCESS;
+  EFI_STATUS                    Status;
+  PCI_DEVICE_INDEPENDENT_REGION Hdr;
+  UINT64                        Magic, OrigAttr;
+  UINT32                        GvtCaps;
 
+  DEBUG((EFI_D_VERBOSE, "%a:%d\n", __FUNCTION__, __LINE__));
+  //
+  // Read the PCI Configuration Header from the PCI Device
+  //
+  Status = PciIo->Pci.Read (
+        PciIo,
+        EfiPciIoWidthUint32,
+        0,
+        sizeof (Hdr) / sizeof (UINT32),
+        &Hdr
+        );
+  if (EFI_ERROR (Status)) {
+    goto Done;
+  }
+
+  Status = EFI_UNSUPPORTED;
+  // Here we check if it's an Intel's VGA controller
+  if (Hdr.ClassCode[2] != PCI_CLASS_DISPLAY ||
+      Hdr.VendorId != 0x8086) {
+    DEBUG((EFI_D_VERBOSE, "%a: [%x:%x] is not GVT device(class:%x)\n",
+          __FUNCTION__, Hdr.VendorId, Hdr.DeviceId, Hdr.ClassCode[2]));
+    goto Done;
+  }
+
+  //
+  // Save original PCI attributes, and enable IO space access, memory space
+  // access, and Bus Master (DMA).
+  //
+  Status = PciIo->Attributes (PciIo, EfiPciIoAttributeOperationGet, 0,
+                    &OrigAttr);
+  if (EFI_ERROR (Status)) {
+    goto Done;
+  }
+
+  Status = PciIo->Attributes (PciIo, EfiPciIoAttributeOperationEnable,
+                    EFI_PCI_DEVICE_ENABLE, NULL);
+  if (EFI_ERROR (Status)) {
+    goto RestoreAttrib;
+  }
+
+  //Check if the GVT Magic presents
+  Status = PciIo->Mem.Read (
+        PciIo,
+        EfiPciIoWidthUint32,
+        PCI_BAR_IDX0,
+        VGT_IF_BASE,
+        sizeof(Magic)/sizeof(UINT32),
+        &Magic
+        );
+  if (EFI_ERROR (Status)) {
+    goto RestoreAttrib;
+  }
+
+  if (Magic != VGT_MAGIC) {
+    DEBUG((EFI_D_VERBOSE,
+        "Wrong Magic %x for [%x:%x]\n",
+        Magic,
+        Hdr.VendorId, Hdr.DeviceId));
+    Status = EFI_UNSUPPORTED;
+    goto RestoreAttrib;
+  }
+
+  //Check if the GVT caps matches
+  Status = PciIo->Mem.Read (
+        PciIo,
+        EfiPciIoWidthUint32,
+        PCI_BAR_IDX0,
+        VGT_IF_BASE + OFFSET_OF(GVT_IF_HDR, vgt_caps),
+        sizeof(GvtCaps)/sizeof(UINT32),
+        &GvtCaps
+        );
+  if (EFI_ERROR (Status)) {
+    goto RestoreAttrib;
+  }
+
+  if (!(GvtCaps & VGT_CAPS_GOP_SUPPORT)) {
+    DEBUG((EFI_D_WARN,
+        "Wrong cap %x for [%x:%x]\n",
+        GvtCaps,
+        Hdr.VendorId, Hdr.DeviceId));
+    Status = EFI_UNSUPPORTED;
+    goto RestoreAttrib;
+  }
+
+  //Now we are all set :)
+  DEBUG((EFI_D_VERBOSE,
+      "Found GVT device on [%x:%x] %x\n",
+      Hdr.VendorId, Hdr.DeviceId, GvtCaps));
+  Status = EFI_SUCCESS;
+
+RestoreAttrib:
+  PciIo->Attributes (PciIo, EfiPciIoAttributeOperationEnable,
+                    OrigAttr, NULL);
+Done:
   return Status;
 }
 
@@ -93,6 +190,18 @@ GvtGopBindingStart (
 
   // Initialize the gop private data
   Status = SetupGvtGop(mPrivate);
+  if (EFI_ERROR (Status)) {
+    goto FreePrivate;
+  }
+
+  Status = gBS->OpenProtocol (
+                  ControllerHandle,
+                  &gEfiPciIoProtocolGuid,
+                  (VOID **) &mPrivate->PciIo,
+                  This->DriverBindingHandle,
+                  ControllerHandle,
+                  EFI_OPEN_PROTOCOL_BY_DRIVER
+                  );
   if (EFI_ERROR (Status)) {
     goto FreePrivate;
   }
