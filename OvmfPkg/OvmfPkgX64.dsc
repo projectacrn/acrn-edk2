@@ -81,6 +81,10 @@
   INTEL:*_*_*_CC_FLAGS = /D DISABLE_NEW_DEPRECATED_INTERFACES
   GCC:*_*_*_CC_FLAGS = -D DISABLE_NEW_DEPRECATED_INTERFACES
 
+[BuildOptions.X64]
+  GCC:*_*_*_CC_FLAGS = -fno-delete-null-pointer-checks -fwrapv
+  GCC:*_*_*_DLINK_FLAGS = -z noexecstack
+
 [BuildOptions.common.EDKII.DXE_RUNTIME_DRIVER]
   GCC:*_*_*_DLINK_FLAGS = -z common-page-size=0x1000
   XCODE:*_*_*_DLINK_FLAGS =
@@ -589,7 +593,7 @@
   gUefiOvmfPkgTokenSpaceGuid.PcdQemuSmbiosValidated|FALSE
 
   # Noexec settings for DXE.
-  gEfiMdeModulePkgTokenSpaceGuid.PcdSetNxForStack|FALSE
+  gEfiMdeModulePkgTokenSpaceGuid.PcdSetNxForStack|TRUE
   gEfiMdeModulePkgTokenSpaceGuid.PcdPropertiesTableEnable|FALSE
 
   # UefiCpuPkg PCDs related to initial AP bringup and general AP management.
