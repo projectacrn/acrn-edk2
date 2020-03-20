@@ -97,7 +97,7 @@
 
   ## This flag is used to control the destination port for PlatformDebugLibIoPort
   #gUefiOvmfPkgTokenSpaceGuid.PcdDebugIoPort|0x402|UINT16|4
-  gUefiOvmfPkgTokenSpaceGuid.PcdDebugIoPort|0x2F8|UINT16|4
+  gUefiOvmfPkgTokenSpaceGuid.PcdDebugIoPort|0x3F8|UINT16|4
 
   ## When VirtioScsiDxe is instantiated for a HBA, the numbers of targets and
   #  LUNs are retrieved from the host during virtio-scsi setup.

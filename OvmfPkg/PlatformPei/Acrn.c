@@ -22,16 +22,7 @@
 #include <Library/MtrrLib.h>
 
 #include "Platform.h"
-
-#define ACRN_E820_PHYSICAL_ADDRESS          0x000EF000
-
-#pragma pack(1)
-  typedef struct {
-    CHAR8             Signature[4];
-    UINT32            E820EntriesCount;
-    EFI_E820_ENTRY64  E820Map[];
-  } ACRN_E820_INFO;
-#pragma pack()
+#include <IndustryStandard/AcrnPlatform.h>
 
 
 STATIC

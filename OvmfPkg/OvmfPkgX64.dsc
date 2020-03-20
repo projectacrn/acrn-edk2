@@ -73,6 +73,9 @@
   GCC:*_*_X64_GENFW_FLAGS   = --keepexceptiontable
   INTEL:*_*_X64_GENFW_FLAGS = --keepexceptiontable
 !endif
+!ifdef $(OVMF_AS_ACRN_SOS)
+  GCC:*_*_*_CC_FLAGS                   = -DOVMF_AS_ACRN_SOS
+!endif
 
   #
   # Disable deprecated APIs.

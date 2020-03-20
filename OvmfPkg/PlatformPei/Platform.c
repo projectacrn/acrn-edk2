@@ -206,7 +206,8 @@ MemMapInitialization (
       //
       PciExBarBase = FixedPcdGet64 (PcdPciExpressBaseAddress);
       ASSERT (PciExBarBase <= MAX_UINT32 - SIZE_256MB);
-      PciBase = BASE_2GB;
+      //set PciBase to the nearest upper-256MB Segment
+      PciBase = ((TopOfLowRam - 1) | 0x0FFFFFFFU) + 1;
       ASSERT (TopOfLowRam <= PciBase);
       ASSERT (PciBase < PciExBarBase);
       PciSize = PciExBarBase - PciBase;

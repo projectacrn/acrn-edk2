@@ -22,7 +22,7 @@ Module Name:
 #include <IndustryStandard/E820.h>
 #include <IndustryStandard/Q35MchIch9.h>
 #include <PiPei.h>
-
+ 
 //
 // The Library classes this module consumes
 //
@@ -40,6 +40,7 @@ Module Name:
 
 #include "Platform.h"
 #include "Cmos.h"
+#include <IndustryStandard/AcrnPlatform.h>
 
 UINT8 mPhysMemAddressWidth;
 

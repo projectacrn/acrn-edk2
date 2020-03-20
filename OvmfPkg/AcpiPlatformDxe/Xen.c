@@ -18,6 +18,8 @@
 #include <Library/HobLib.h>
 #include <Guid/XenInfo.h>
 #include <Library/BaseLib.h>
+#include <IndustryStandard/E820.h>
+#include <IndustryStandard/AcrnPlatform.h>
 
 #define XEN_ACPI_PHYSICAL_ADDRESS         0x000EA020
 #define XEN_BIOS_PHYSICAL_END             0x000FFFFF
@@ -56,10 +58,12 @@ XenDetected (
   @return EFI_NOT_FOUND      Don't find Xen RSDP structure.
   @return EFI_ABORTED        Find Xen RSDP structure, but it's not integrated.
 
-**/
+**/ 
 EFI_STATUS
 EFIAPI
-GetXenAcpiRsdp (
+FindRsdp (
+  IN UINT64 BeginAddr,
+  IN UINT64 EndAddr,
   OUT   EFI_ACPI_2_0_ROOT_SYSTEM_DESCRIPTION_POINTER   **RsdpPtr
   )
 {
@@ -70,8 +74,8 @@ GetXenAcpiRsdp (
   //
   // Detect the RSDP structure
   //
-  for (XenAcpiPtr = (UINT8*)(UINTN) XEN_ACPI_PHYSICAL_ADDRESS;
-       XenAcpiPtr < (UINT8*)(UINTN) XEN_BIOS_PHYSICAL_END;
+  for (XenAcpiPtr = (UINT8*)BeginAddr;
+       XenAcpiPtr < (UINT8*)EndAddr;
        XenAcpiPtr += 0x10) {
 
     RsdpStructurePtr = (EFI_ACPI_2_0_ROOT_SYSTEM_DESCRIPTION_POINTER *)
@@ -107,6 +111,36 @@ GetXenAcpiRsdp (
     }
   }
 
+  return EFI_NOT_FOUND;    
+}
+
+EFI_STATUS
+EFIAPI
+GetXenAcpiRsdp (
+  OUT   EFI_ACPI_2_0_ROOT_SYSTEM_DESCRIPTION_POINTER   **RsdpPtr
+  )
+{
+  ACRN_E820_INFO    *E820;
+  UINT32            Loop;
+  EFI_E820_ENTRY64  *Entry;
+  EFI_STATUS Status;
+
+  Status = FindRsdp(XEN_ACPI_PHYSICAL_ADDRESS,XEN_BIOS_PHYSICAL_END,RsdpPtr);
+  if(!EFI_ERROR(Status))
+      return EFI_SUCCESS;
+
+  DEBUG ((EFI_D_INFO,"Unable to find RSDP at ACPI LOWMEM. Try to find it in E820 ACPI Region...\n"));
+  E820 = (VOID *)ACRN_E820_PHYSICAL_ADDRESS;
+  for (Loop = 0, Entry = &E820->E820Map[Loop]; Loop < E820->E820EntriesCount;
+       Entry = &E820->E820Map[++Loop]) {
+    if (Entry->Type ==  EfiAcpiAddressRangeACPI) {
+      Status = FindRsdp(Entry->BaseAddr,Entry->BaseAddr+Entry->Length,RsdpPtr);
+      if(!EFI_ERROR(Status)){
+        DEBUG ((EFI_D_INFO,"Found RSDP at %llx\n",(UINT64)(*RsdpPtr)));
+        return EFI_SUCCESS;
+      }
+    }
+  }
   return EFI_NOT_FOUND;
 }
 
