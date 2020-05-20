@@ -25,8 +25,8 @@
 #define VGT_MAGIC               0x4776544776544776ULL /* 'vGTvGTvG' */
 #define VGT_IF_BASE             0x78000
 #define VGT_G2V_OFFSET          0x818
-#define VGT_GOP_OFFSET          0x86C
-#define VGT_G2V_GOP_SETUP       0xd
+#define VGT_GOP_OFFSET          0x860
+#define VGT_G2V_GOP_SETUP       0x8
 
 /* GVT_IF_HDR is part of vgt_if in gvt linux kernel driver */
 
