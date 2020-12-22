@@ -14,7 +14,7 @@
 ;------------------------------------------------------------------------------
 
 %define SEC_DEFAULT_CR0  0x40000023
-%define SEC_DEFAULT_CR4  0x640
+%define SEC_DEFAULT_CR4  0x600
 
 BITS    16
 
