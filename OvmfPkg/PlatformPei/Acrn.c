@@ -143,8 +143,8 @@ AcrnFindPciMmio64Aperture (
   OUT  UINT64               *Pci64Size
   )
 {
-  *Pci64Base = BASE_4GB;
-  *Pci64Size = SIZE_1GB;
+  *Pci64Base = BASE_256GB;
+  *Pci64Size = SIZE_256GB;
 
   return RETURN_SUCCESS;
 }
