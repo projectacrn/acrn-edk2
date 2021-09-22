@@ -118,7 +118,9 @@ typedef struct {
   UINT64 FDSS;          ///< Offset 0x3AA DSS Buffer address allocated for IFFS feature
   UINT32 FDSP;          ///< Offset 0x3B2 Size of DSS buffer
   UINT32 STAT;          ///< Offset 0x3B6 State Indicator
-  UINT8  RM31[0x46];    ///< Offset 0x3BA - 0x3FF  Reserved Must be zero. Bug in spec 0x45(69)
+  UINT64 RVDA;          ///< Offset 0x3BA Absolute/Relative Address of Raw VBT Data from OpRegion Base
+  UINT32 RVDS;          ///< Offset 0x3C2 Raw VBT Data Size
+  UINT8  RSVD3[0x3A];   ///< Offset 0x3C6 - 0x3FF  Reserved Must be zero. Bug in spec 0x45(69)
 } IGD_OPREGION_MBOX3;
 
 ///
@@ -150,6 +152,28 @@ typedef struct {
   IGD_OPREGION_MBOX4  MBox4;  ///< Mailbox 4: Video BIOS Table (VBT) (Offset 0x400, Size 0x1800)
   IGD_OPREGION_MBOX5  MBox5;  ///< Mailbox 5: BIOS to Driver Notification Extension (Offset 0x1C00, Size 0x400)
 } IGD_OPREGION_STRUCTURE;
+
+///
+/// VBT Header Structure
+///
+typedef struct {
+  UINT8  Product_String[20];
+  UINT16 Version;
+  UINT16 Header_Size;
+  UINT16 Table_Size;
+  UINT8  Checksum;
+  UINT8  Reserved1;
+  UINT32 Bios_Data_Offset;
+  UINT32 Aim_Data_Offset[4];
+} VBT_HEADER;
+
+typedef struct {
+  UINT8  BDB_Signature[16];
+  UINT16 BDB_Version;
+  UINT16 BDB_Header_Size;
+  UINT16 BDB_Size;
+} VBT_BIOS_DATA_HEADER;
+
 #pragma pack()
 
 #endif

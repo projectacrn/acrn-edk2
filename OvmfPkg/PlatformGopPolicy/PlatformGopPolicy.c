@@ -22,12 +22,13 @@ Copyright (c)  1999  - 2020, Intel Corporation. All rights reserved
 
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
-#include <Library/DxeServicesLib.h>
+#include <Library/PciLib.h>
+#include "IgdOpRegion.h"
 
-#define VBT_ROM_FILE_GUID \
-{ 0x1647B4F3, 0x3E8A, 0x4FEF, { 0x81, 0xC8, 0x32, 0x8E, 0xD6, 0x47, 0xAB, 0x1A } }
+#define IGD_OPREGION_VBT_SIZE_6K (6 * SIZE_1KB)
 
 PLATFORM_GOP_POLICY_PROTOCOL  mPlatformGOPPolicy;
+EFI_PHYSICAL_ADDRESS mVbt;
 
 //
 // Function implementations
@@ -70,21 +71,92 @@ GetVbtData (
    OUT UINT32 *VbtSize
 )
 {
-  EFI_STATUS Status;
-  VOID *VbtTable;
-  UINTN size;
-  GUID vbt = VBT_ROM_FILE_GUID;
+  IGD_OPREGION_STRUCTURE *OpRegion;
+  EFI_STATUS Status = EFI_INVALID_PARAMETER;
+  UINT16 VerMajor, VerMinor = 0;
+  UINT32 VbtSizeMax = 0;
 
-  DEBUG ((EFI_D_ERROR, "GetVbtData\n"));
-  Status = GetSectionFromFv (&vbt, EFI_SECTION_RAW, 0, &VbtTable, &size);
-  if (!EFI_ERROR (Status)) {
-    DEBUG ((EFI_D_ERROR, "GetVbtTable success\n"));
-    *VbtAddress =(EFI_PHYSICAL_ADDRESS)(UINT8 *)VbtTable;
-    *VbtSize    = size;
-    return EFI_SUCCESS;
-  } else {
-    return EFI_NOT_FOUND;
+  OpRegion = (IGD_OPREGION_STRUCTURE*)(UINTN)PciRead32 (
+    PCI_LIB_ADDRESS (
+      0x00,
+      0x02,
+      0x0,
+      0xFC));
+
+  /* Validate IGD OpRegion signature and version */
+  if (OpRegion) {
+    if (CompareMem (OpRegion->Header.SIGN, IGD_OPREGION_HEADER_SIGN, sizeof(OpRegion->Header.SIGN)) != 0) {
+      DEBUG ((EFI_D_ERROR, "%a: Invalid OpRegion signature, expect %s\n",
+        __FUNCTION__, IGD_OPREGION_HEADER_SIGN));
+      return EFI_INVALID_PARAMETER;
+    } else {
+      VerMajor = OpRegion->Header.OVER >> 24;
+      VerMinor = OpRegion->Header.OVER >> 16 & 0xff;
+      if (VerMajor < 2 || OpRegion->MBox3.RVDA == 0) {
+        VbtSizeMax = IGD_OPREGION_VBT_SIZE_6K;
+        if (((VBT_HEADER*)&OpRegion->MBox4)->Table_Size > IGD_OPREGION_VBT_SIZE_6K) {
+          DEBUG ((EFI_D_ERROR, "%a: VBT Header reports larger size (0x%x) than OpRegion VBT Mailbox (0x%x)\n",
+            __FUNCTION__,
+            ((VBT_HEADER*)&OpRegion->MBox4)->Table_Size, IGD_OPREGION_VBT_SIZE_6K));
+          VbtSizeMax = 0;
+          return EFI_INVALID_PARAMETER;
+        }
+      } else {
+        DEBUG ((EFI_D_ERROR, "%a: Unsupported OpRegion version %d.%d\n",
+          __FUNCTION__, VerMajor, VerMinor));
+        return EFI_UNSUPPORTED;
+      }
+    }
   }
+
+  if (mVbt) {
+    Status = gBS->FreePages (
+                    mVbt,
+                    EFI_SIZE_TO_PAGES (VbtSizeMax)
+                    );
+    mVbt = 0;
+  }
+
+  if (VbtSizeMax == IGD_OPREGION_VBT_SIZE_6K) {
+    mVbt = SIZE_4GB - 1;
+  }
+
+  /* Only operates VBT on support OpRegion */
+  if (VbtSizeMax) {
+    Status = gBS->AllocatePages (
+                    AllocateMaxAddress,
+                    EfiReservedMemoryType,
+                    EFI_SIZE_TO_PAGES (VbtSizeMax),
+                    &mVbt
+                    );
+    if (EFI_ERROR (Status)) {
+      DEBUG ((EFI_D_ERROR, "%a: AllocatePages failed for VBT size 0x%x status %d\n",
+        __FUNCTION__, VbtSizeMax, Status));
+      return EFI_OUT_OF_RESOURCES;
+    } else {
+      UINT8 CheckSum = 0;
+
+      /* Zero-out first*/
+      ZeroMem ((VOID*)mVbt, VbtSizeMax);
+      /* Only copy with size as specified in VBT table */
+      CopyMem((VOID*)mVbt, (VOID*)OpRegion->MBox4.RVBT, ((VBT_HEADER*)&OpRegion->MBox4)->Table_Size);
+
+      /* Fix the checksum */
+      for (UINT32 i = 0; i < ((VBT_HEADER*)mVbt)->Table_Size; i++) {
+        CheckSum = (CheckSum + ((UINT8*)mVbt)[i]) & 0xFF;
+      }
+      ((VBT_HEADER*)mVbt)->Checksum += (0x100 - CheckSum);
+
+      *VbtAddress = mVbt;
+      *VbtSize = ((VBT_HEADER*)mVbt)->Table_Size;
+      DEBUG ((DEBUG_INFO, "%a: VBT Version %d size 0x%x\n", __FUNCTION__,
+        ((VBT_BIOS_DATA_HEADER*)(mVbt + ((VBT_HEADER*)mVbt)->Bios_Data_Offset))->BDB_Version,
+        ((VBT_HEADER*)mVbt)->Table_Size));
+      return EFI_SUCCESS;
+    }
+  }
+
+  return EFI_UNSUPPORTED;
 }
 
 /**
