@@ -92,7 +92,17 @@ GetVbtData (
     } else {
       VerMajor = OpRegion->Header.OVER >> 24;
       VerMinor = OpRegion->Header.OVER >> 16 & 0xff;
-      if (VerMajor < 2 || OpRegion->MBox3.RVDA == 0) {
+      /* 
+       * OpRegion version and VBT size:
+       * Before 2.0: VBT is stored in OpRegion Mailbox 4 and the size won't exceed 6K.
+       * For 2.0 and 2.0+:
+       *   If VBT raw data size doesn't exceeds 6K, VBT is stored in Mailbox 4.
+       *   If exceeds 6K, VBT is stored in extended VBT region, the address and
+       *     size are stored in OpRegion head RVDA and RVDS.
+       *   - 2.0, RVDA holds the absolute physical address, don't support this case.
+       *   - 2.0+, RVDA holds the relative address OpRegion base.
+       */
+      if (VerMajor < 2) {
         VbtSizeMax = IGD_OPREGION_VBT_SIZE_6K;
         if (((VBT_HEADER*)&OpRegion->MBox4)->Table_Size > IGD_OPREGION_VBT_SIZE_6K) {
           DEBUG ((EFI_D_ERROR, "%a: VBT Header reports larger size (0x%x) than OpRegion VBT Mailbox (0x%x)\n",
@@ -101,10 +111,16 @@ GetVbtData (
           VbtSizeMax = 0;
           return EFI_INVALID_PARAMETER;
         }
-      } else {
-        DEBUG ((EFI_D_ERROR, "%a: Unsupported OpRegion version %d.%d\n",
-          __FUNCTION__, VerMajor, VerMinor));
+      } else if (VerMajor == 2 && VerMinor == 0 && OpRegion->MBox3.RVDA && OpRegion->MBox3.RVDS){
+        DEBUG ((EFI_D_ERROR, "%a: Unsupported OpRegion version %d.%d with VBT larger than 0x%x\n",
+          __FUNCTION__, VerMajor, VerMinor, IGD_OPREGION_VBT_SIZE_6K));
+        VbtSizeMax = 0;
         return EFI_UNSUPPORTED;
+      } else {
+        VbtSizeMax = IGD_OPREGION_VBT_SIZE_6K;
+        if (OpRegion->MBox3.RVDA && OpRegion->MBox3.RVDS) {
+          VbtSizeMax = OpRegion->MBox3.RVDS;
+        }
       }
     }
   }
@@ -117,12 +133,9 @@ GetVbtData (
     mVbt = 0;
   }
 
-  if (VbtSizeMax == IGD_OPREGION_VBT_SIZE_6K) {
-    mVbt = SIZE_4GB - 1;
-  }
-
   /* Only operates VBT on support OpRegion */
   if (VbtSizeMax) {
+    mVbt = SIZE_4GB - 1;
     Status = gBS->AllocatePages (
                     AllocateMaxAddress,
                     EfiReservedMemoryType,
@@ -139,7 +152,11 @@ GetVbtData (
       /* Zero-out first*/
       ZeroMem ((VOID*)mVbt, VbtSizeMax);
       /* Only copy with size as specified in VBT table */
-      CopyMem((VOID*)mVbt, (VOID*)OpRegion->MBox4.RVBT, ((VBT_HEADER*)&OpRegion->MBox4)->Table_Size);
+      if (VerMajor < 2 || !OpRegion->MBox3.RVDA || !OpRegion->MBox3.RVDS) {
+        CopyMem((VOID*)mVbt, (VOID*)OpRegion->MBox4.RVBT, ((VBT_HEADER*)&OpRegion->MBox4)->Table_Size);
+      } else {
+        CopyMem((VOID*)mVbt, (VOID*)OpRegion + OpRegion->MBox3.RVDA, OpRegion->MBox3.RVDS);
+      }
 
       /* Fix the checksum */
       for (UINT32 i = 0; i < ((VBT_HEADER*)mVbt)->Table_Size; i++) {
