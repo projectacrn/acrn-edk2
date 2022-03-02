@@ -152,6 +152,7 @@ InstallVbeShim (
   HostBridgeDevId = PcdGet16 (PcdOvmfHostBridgePciDevId);
   switch (HostBridgeDevId) {
   case INTEL_82441_DEVICE_ID:
+  case ACRN_HOSTBRIDGE_DEVICE_ID:
     Pam1Address = PMC_REGISTER_PIIX4 (PIIX4_PAM1);
     break;
   case INTEL_Q35_MCH_DEVICE_ID:
