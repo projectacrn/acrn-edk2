@@ -805,3 +805,190 @@ NextImage:
   return RetStatus;
 }
 
+/**
+  Load Option Rom image Light for specified PCI device.
+  Light version of LoadOpRomImage as it is based on pre-allocated rom_bar addr
+
+  @param PciDevice Pci device instance.
+
+  @retval EFI_OUT_OF_RESOURCES No enough memory to hold image.
+  @retval EFI_SUCESS           Successfully loaded Option Rom.
+
+**/
+EFI_STATUS
+LoadOpRomImageLight (
+  IN PCI_IO_DEVICE   *PciDevice
+  )
+{
+  UINT8                     RomBarIndex;
+  UINT8                     Indicator;
+  UINT16                    OffsetPcir;
+  UINT32                    RomBarOffset;
+  UINT32                    RomBar;
+  UINT32                    RomBase;
+  EFI_STATUS                RetStatus;
+  BOOLEAN                   FirstCheck;
+  UINT8                     *Image;
+  PCI_EXPANSION_ROM_HEADER  *RomHeader;
+  PCI_DATA_STRUCTURE        *RomPcir;
+  UINT64                    RomSize;
+  UINT64                    RomImageSize;
+  UINT32                    LegacyImageLength;
+  UINT8                     *RomInMemory;
+  UINT8                     CodeType;
+
+  RomSize       = PciDevice->RomSize;
+
+  Indicator     = 0;
+  RomImageSize  = 0;
+  RomInMemory   = NULL;
+  CodeType      = 0xFF;
+
+  //
+  // Get the RomBarIndex
+  //
+
+  //
+  // 0x30
+  //
+  RomBarIndex = PCI_EXPANSION_ROM_BASE;
+  //
+  // Allocate memory for Rom header and PCIR
+  //
+  RomHeader = AllocatePool (sizeof (PCI_EXPANSION_ROM_HEADER));
+  if (RomHeader == NULL) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  RomPcir = AllocatePool (sizeof (PCI_DATA_STRUCTURE));
+  if (RomPcir == NULL) {
+    FreePool (RomHeader);
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  // Get the RomBar from 0x30 Rom_bar register
+  PciDevice->PciIo.Pci.Read (
+                 &PciDevice->PciIo,
+                 (EFI_PCI_IO_PROTOCOL_WIDTH) EfiPciWidthUint32,
+                 RomBarIndex,
+                 1,
+                 &RomBase
+                 );
+  RomBar = (UINT32) RomBase & (0xFFFFF800);
+
+  RomBarOffset  = RomBar;
+  RetStatus     = EFI_NOT_FOUND;
+  FirstCheck    = TRUE;
+  LegacyImageLength = 0;
+
+  do {
+    PciDevice->PciRootBridgeIo->Mem.Read (
+                                      PciDevice->PciRootBridgeIo,
+                                      EfiPciWidthUint8,
+                                      RomBarOffset,
+                                      sizeof (PCI_EXPANSION_ROM_HEADER),
+                                      (UINT8 *) RomHeader
+                                      );
+
+    if (RomHeader->Signature != PCI_EXPANSION_ROM_HEADER_SIGNATURE) {
+      RomBarOffset = RomBarOffset + 512;
+      if (FirstCheck) {
+        break;
+      } else {
+        RomImageSize = RomImageSize + 512;
+        continue;
+      }
+    }
+
+    FirstCheck  = FALSE;
+    OffsetPcir  = RomHeader->PcirOffset;
+    //
+    // If the pointer to the PCI Data Structure is invalid, no further images can be located.
+    // The PCI Data Structure must be DWORD aligned.
+    //
+    if (OffsetPcir == 0 ||
+        (OffsetPcir & 3) != 0 ||
+        RomImageSize + OffsetPcir + sizeof (PCI_DATA_STRUCTURE) > RomSize) {
+      break;
+    }
+    PciDevice->PciRootBridgeIo->Mem.Read (
+                                      PciDevice->PciRootBridgeIo,
+                                      EfiPciWidthUint8,
+                                      RomBarOffset + OffsetPcir,
+                                      sizeof (PCI_DATA_STRUCTURE),
+                                      (UINT8 *) RomPcir
+                                      );
+    //
+    // If a valid signature is not present in the PCI Data Structure, no further images can be located.
+    //
+    if (RomPcir->Signature != PCI_DATA_STRUCTURE_SIGNATURE) {
+      break;
+    }
+    if (RomImageSize + RomPcir->ImageLength * 512 > RomSize) {
+      break;
+    }
+    if (RomPcir->CodeType == PCI_CODE_TYPE_PCAT_IMAGE) {
+      CodeType = PCI_CODE_TYPE_PCAT_IMAGE;
+      LegacyImageLength = ((UINT32)((EFI_LEGACY_EXPANSION_ROM_HEADER *)RomHeader)->Size512) * 512;
+    }
+    Indicator     = RomPcir->Indicator;
+    RomImageSize  = RomImageSize + RomPcir->ImageLength * 512;
+    RomBarOffset  = RomBarOffset + RomPcir->ImageLength * 512;
+  } while (((Indicator & 0x80) == 0x00) && ((RomBarOffset - RomBar) < RomSize));
+
+  //
+  // Some Legacy Cards do not report the correct ImageLength so used the maximum
+  // of the legacy length and the PCIR Image Length
+  //
+  if (CodeType == PCI_CODE_TYPE_PCAT_IMAGE) {
+    RomImageSize = MAX (RomImageSize, LegacyImageLength);
+  }
+
+  if (RomImageSize > 0) {
+    RetStatus = EFI_SUCCESS;
+    Image     = AllocatePool ((UINT32) RomImageSize);
+    if (Image == NULL) {
+      FreePool (RomHeader);
+      FreePool (RomPcir);
+      return EFI_OUT_OF_RESOURCES;
+    }
+
+    //
+    // Copy Rom image into memory
+    //
+    PciDevice->PciRootBridgeIo->Mem.Read (
+                                      PciDevice->PciRootBridgeIo,
+                                      EfiPciWidthUint8,
+                                      RomBar,
+                                      (UINT32) RomImageSize,
+                                      Image
+                                      );
+    RomInMemory = Image;
+  }
+
+  PciDevice->EmbeddedRom    = TRUE;
+  PciDevice->PciIo.RomSize  = RomImageSize;
+  PciDevice->PciIo.RomImage = RomInMemory;
+
+  //
+  // For OpROM read from PCI device:
+  //   Add the Rom Image to internal database for later PCI light enumeration
+  //
+  PciRomAddImageMapping (
+    NULL,
+    PciDevice->PciRootBridgeIo->SegmentNumber,
+    PciDevice->BusNumber,
+    PciDevice->DeviceNumber,
+    PciDevice->FunctionNumber,
+    PciDevice->PciIo.RomImage,
+    PciDevice->PciIo.RomSize
+    );
+
+  //
+  // Free allocated memory
+  //
+  FreePool (RomHeader);
+  FreePool (RomPcir);
+
+  return RetStatus;
+}

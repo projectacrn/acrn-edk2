@@ -108,6 +108,20 @@ LoadOpRomImage (
   );
 
 /**
+  Load Option Rom image Light for specified PCI device.
+
+  @param PciDevice Pci device instance.
+
+  @retval EFI_OUT_OF_RESOURCES No enough memory to hold image.
+  @retval EFI_SUCESS           Successfully loaded Option Rom.
+
+**/
+EFI_STATUS
+LoadOpRomImageLight (
+  IN PCI_IO_DEVICE   *PciDevice
+  );
+
+/**
   Enable/Disable Option Rom decode.
 
   @param PciDevice    Pci device instance.
