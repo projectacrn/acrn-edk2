@@ -14,12 +14,12 @@
 ;------------------------------------------------------------------------------
 
 %define SEC_DEFAULT_CR0  0x40000023
-%define SEC_DEFAULT_CR4  0x640
+%define SEC_DEFAULT_CR4  0x600
 
 BITS    16
 
 ;
-; Modified:  EAX, EBX
+; Modified:  EAX, EBX, ECX, EDX
 ;
 ; @param[out]     DS       Selector allowing flat access to all addresses
 ; @param[out]     ES       Selector allowing flat access to all addresses
@@ -47,7 +47,14 @@ o32 lgdt    [cs:bx]
 BITS    32
 jumpTo32BitAndLandHere:
 
+    mov     eax, 1
+    cpuid
     mov     eax, SEC_DEFAULT_CR4
+
+    test    edx, (1 << 7)               ; Check for MCE capabilities
+    jz      .mceNotSupported
+    or      eax, (1 << 6)               ; Set CR4.MCE
+.mceNotSupported:
     mov     cr4, eax
 
     debugShowPostCode POSTCODE_32BIT_MODE
